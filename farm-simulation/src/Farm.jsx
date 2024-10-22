@@ -38,17 +38,26 @@ const Farm = () => {
       daneZdrowie: [100],
     },
   ]);
+
+  // Dodane zasoby: woda, nawozy, pestycydy
+  const [resources, setResources] = useState({
+    water: 500, // Początkowy zasób wody
+    fertilizers: 100, // Początkowy zasób nawozów
+    pesticides: 50, // Początkowy zasób pestycydów
+  });
+
   const [eventLog, setEventLog] = useState([]);
   const [day, setDay] = useState(1);
-  const [points, setPoints] = useState(0); // Nowy stan dla punktów
+  const [points, setPoints] = useState(0); // Punkty za zbiory
+  const [daysSinceLastEvent, setDaysSinceLastEvent] = useState(0); // Licznik dni od ostatniego losowego zdarzenia
+  const [weather, setWeather] = useState("sunny"); // Prognoza pogody
 
   const logEvent = (message) => {
     setEventLog((prevLog) => [`Day ${day}: ${message}`, ...prevLog]);
   };
 
-  // Funkcja do aktualizacji wzrostu roślin
   const updateGrowth = (field) => {
-    if       (field.growthStage > 0 && !field.readyToHarvest) {
+    if (field.growthStage > 0 && !field.readyToHarvest) {
       if (field.growthTime > 0) {
         return { ...field, growthTime: field.growthTime - 1 };
       } else {
@@ -61,32 +70,26 @@ const Farm = () => {
     return field;
   };
 
-  useEffect(() => {
-    const randomEvent = Math.random();
-
-    if (randomEvent < 0.) {
-      logEvent("Deszcz zwiększył poziom wody.");
-      setFields(fields.map((field) => ({ ...field, water: field.water + 20 })));
-    } else if (randomEvent < 0.5) {
-      logEvent("Susza obniżyła poziom wody.");
-      setFields(fields.map((field) => ({ ...field, water: field.water - 20 })));
-    } else if (randomEvent < 0.7) {
-      logEvent("Szkodniki zaatakowały uprawy!");
-      setFields(
-        fields.map((field) =>
-          field.crop ? { ...field, health: field.health - 20 } : field
-        )
-      );
+  const buyNewField = () => {
+    if (points >= 200) {
+      const newField = {
+        id: fields.length + 1,
+        crop: null,
+        water: 100,
+        health: 100,
+        growthStage: 0,
+        growthTime: 0,
+        readyToHarvest: false,
+        daneWoda: [100],
+        daneZdrowie: [100],
+      };
+      setFields([...fields, newField]);
+      setPoints(points - 200);
+      logEvent(`Zakupiono nowe pole!`);
+    } else {
+      logEvent("Brak wystarczających punktów na zakup nowego pola.");
     }
-
-    // Zwiększ dzień co kilka sekund
-    const timer = setTimeout(() => {
-      setDay(day + 1);
-      // Aktualizuj wzrost roślin na każdym polu
-      setFields(fields.map((field) => updateGrowth(field)));
-    }, 5000);
-    return () => clearTimeout(timer);
-  }, [day, fields]);
+  };
 
   const plantCrop = (id, crop, growthTime) => {
     setFields(
@@ -107,19 +110,127 @@ const Farm = () => {
     logEvent(`Zasadzono ${crop} na polu ${id}.`);
   };
 
+  // Generowanie losowej prognozy pogody
+  const generateWeather = () => {
+    const weatherOptions = ["sunny", "rain", "drought"];
+    const randomWeather =
+      weatherOptions[Math.floor(Math.random() * weatherOptions.length)];
+
+    switch (randomWeather) {
+      case "sunny":
+        // Brak wpływu na pola, dzień bez zmian
+        logEvent("Słoneczny dzień. Brak zmian na polach.");
+        break;
+
+      case "rain":
+        // Deszcz: zwiększa poziom wody na wszystkich polach
+        setFields((prevFields) =>
+          prevFields.map((field) => ({
+            ...field,
+            water: Math.min(field.water + 30, 100), // Zwiększamy wodę maksymalnie do 100
+            daneWoda: [...field.daneWoda, Math.min(field.water + 30, 100)],
+          }))
+        );
+        logEvent("Deszcz zwiększył poziom wody na polach.");
+        break;
+
+      case "drought":
+        // Susza: obniża poziom wody i zdrowie roślin
+        setFields((prevFields) =>
+          prevFields.map((field) => ({
+            ...field,
+            water: Math.max(field.water - 20, 0), // Zmniejszamy wodę, minimalnie do 0
+            health: Math.max(field.health - 10, 0), // Zmniejszamy zdrowie, minimalnie do 0
+            daneWoda: [...field.daneWoda, Math.max(field.water - 20, 0)],
+            daneZdrowie: [...field.daneZdrowie, Math.max(field.health - 10, 0)],
+          }))
+        );
+        logEvent("Susza obniżyła poziom wody i zdrowie roślin.");
+        break;
+
+      default:
+        logEvent("Nieznana pogoda.");
+    }
+
+    setWeather(randomWeather);
+    logEvent(`Prognoza pogody na dziś: ${randomWeather}`);
+  };
+
+  useEffect(() => {
+    // Generowanie nowej pogody każdego dnia
+
+    const randomEventChance = Math.random();
+    if (daysSinceLastEvent >= 3) {
+      if (randomEventChance < 0.3) {
+        logEvent("Deszcz zwiększył poziom wody.");
+        setFields(
+          fields.map((field) => ({ ...field, water: field.water + 20 }))
+        );
+      } else if (randomEventChance < 0.5) {
+        logEvent("Susza obniżyła poziom wody.");
+        setFields(
+          fields.map((field) => ({ ...field, water: field.water - 20 }))
+        );
+      } else if (randomEventChance < 0.7) {
+        logEvent("Szkodniki zaatakowały uprawy!");
+        setFields(
+          fields.map((field) =>
+            field.crop ? { ...field, health: field.health - 20 } : field
+          )
+        );
+      }
+      setDaysSinceLastEvent(0);
+    }
+
+    const timer = setTimeout(() => {
+      setDaysSinceLastEvent(daysSinceLastEvent + 1);
+      setDay(day + 1);
+      generateWeather();
+      setFields(fields.map((field) => updateGrowth(field)));
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [day, fields, daysSinceLastEvent]);
+
+  // Funkcja do zarządzania podlewaniem (zmniejsza zasoby wody)
   const waterField = (id) => {
-    setFields(
-      fields.map((field) =>
-        field.id === id
-          ? {
-              ...field,
-              water: field.water + 10,
-              daneWoda: [...field.daneWoda, field.water + 10],
-            }
-          : field
-      )
-    );
-    logEvent(`Podlano pole ${id}.`);
+    if (resources.water > 0) {
+      setFields(
+        fields.map((field) =>
+          field.id === id
+            ? {
+                ...field,
+                water: field.water + 10,
+                daneWoda: [...field.daneWoda, field.water + 10],
+              }
+            : field
+        )
+      );
+      setResources({ ...resources, water: resources.water - 10 }); // Zużycie wody
+      logEvent(`Podlano pole ${id}. Zużyto 10 jednostek wody.`);
+    } else {
+      logEvent("Brak wystarczającej ilości wody do podlania.");
+    }
+  };
+
+  // Funkcja do nawożenia (zmniejsza zasoby nawozów)
+  const fertilizeField = (id) => {
+    if (resources.fertilizers > 0) {
+      setFields(
+        fields.map((field) =>
+          field.id === id
+            ? {
+                ...field,
+                health: field.health + 10,
+                daneZdrowie: [...field.daneZdrowie, field.health + 10],
+              }
+            : field
+        )
+      );
+      setResources({ ...resources, fertilizers: resources.fertilizers - 5 }); // Zużycie nawozów
+      logEvent(`Nawożono pole ${id}. Zużyto 5 jednostek nawozów.`);
+    } else {
+      logEvent("Brak wystarczającej ilości nawozów.");
+    }
   };
 
   // Funkcja do zbioru plonów
@@ -143,13 +254,29 @@ const Farm = () => {
       <h2>Farma</h2>
       <p>Dzień: {day}</p>
       <p>Punkty: {points}</p>
-      <div style={{ display: "flex", gap: "10px", justifyContent: "center" }}>
+      <p>Prognoza pogody: {weather}</p>
+      <div>
+        <h3>Zasoby:</h3>
+        <p>Woda: {resources.water}</p>
+        <p>Nawozy: {resources.fertilizers}</p>
+        <p>Pestycydy: {resources.pesticides}</p>
+      </div>
+      <button onClick={buyNewField}>Kup nowe pole (200 punktów)</button>
+      <div
+        style={{
+          display: "flex",
+          gap: "10px",
+          justifyContent: "center",
+          marginTop: 20,
+        }}
+      >
         {fields.map((field) => (
           <Field
             key={field.id}
             field={field}
             onPlant={plantCrop}
             onWater={waterField}
+            onFertilize={fertilizeField}
             onHarvest={harvestCrop}
           />
         ))}
