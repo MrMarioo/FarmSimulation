@@ -39,16 +39,76 @@ const Farm = () => {
     },
   ]);
 
-  // Dodane zasoby: woda, nawozy, pestycydy
   const [resources, setResources] = useState({
-    water: 500, // Początkowy zasób wody
-    fertilizers: 100, // Początkowy zasób nawozów
-    pesticides: 50, // Początkowy zasób pestycydów
+    water: 500,
+    fertilizers: 100,
+    pesticides: 50,
   });
+
+  const [buildings, setBuildings] = useState({
+    warehouse: false, // Magazyn do przechowywania plonów
+    mill: false, // Młyn do przetwarzania plonów
+  });
+
+  const [tools, setTools] = useState({
+    irrigationSystem: false, // System automatycznego nawadniania
+    harvester: false, // Narzędzie do szybszego zbierania plonów
+    seeder: false, // Narzędzie do automatycznego sadzenia
+  });
+
+  const buyWarehouse = () => {
+    if (points >= 300) {
+      setBuildings({ ...buildings, warehouse: true });
+      setPoints(points - 300);
+      logEvent("Zakupiono magazyn.");
+    } else {
+      logEvent("Brak wystarczających punktów na zakup magazynu.");
+    }
+  };
+
+  const buyMill = () => {
+    if (points >= 400) {
+      setBuildings({ ...buildings, mill: true });
+      setPoints(points - 400);
+      logEvent("Zakupiono młyn.");
+    } else {
+      logEvent("Brak wystarczających punktów na zakup młyna.");
+    }
+  };
+
+  const buyIrrigationSystem = () => {
+    if (points >= 500) {
+      setTools({ ...tools, irrigationSystem: true });
+      setPoints(points - 500);
+      logEvent("Zakupiono system nawadniania.");
+    } else {
+      logEvent("Brak wystarczających punktów na zakup systemu nawadniania.");
+    }
+  };
+
+  const buyHarvester = () => {
+    if (points >= 300) {
+      setTools({ ...tools, harvester: true });
+      setPoints(points - 300);
+      logEvent("Zakupiono narzędzie do zbioru.");
+    } else {
+      logEvent("Brak wystarczających punktów na zakup narzędzia do zbioru.");
+    }
+  };
+
+  const buySeeder = () => {
+    if (points >= 400) {
+      setTools({ ...tools, seeder: true });
+      setPoints(points - 400);
+      logEvent("Zakupiono Seeder, który automatycznie zasiewa pola.");
+    } else {
+      logEvent("Brak wystarczających punktów na zakup Seeder.");
+    }
+  };
 
   const [eventLog, setEventLog] = useState([]);
   const [day, setDay] = useState(1);
-  const [points, setPoints] = useState(0); // Punkty za zbiory
+  const [points, setPoints] = useState(1000); // Punkty za zbiory
   const [daysSinceLastEvent, setDaysSinceLastEvent] = useState(0); // Licznik dni od ostatniego losowego zdarzenia
   const [weather, setWeather] = useState("sunny"); // Prognoza pogody
 
@@ -191,6 +251,92 @@ const Farm = () => {
     return () => clearTimeout(timer);
   }, [day, fields, daysSinceLastEvent]);
 
+  useEffect(() => {
+    if (tools.irrigationSystem) {
+      // Podlewanie automatyczne co 3 dni
+      if (day % 3 === 0) {
+        setFields((prevFields) =>
+          prevFields.map((field) => ({
+            ...field,
+            water: Math.min(field.water + 20, 100), // Nawadnianie bez przekraczania 100
+            daneWoda: [...field.daneWoda, Math.min(field.water + 20, 100)],
+          }))
+        );
+        logEvent("System nawadniania automatycznie podlał wszystkie pola.");
+      }
+    }
+  }, [day, tools.irrigationSystem]);
+
+  useEffect(() => {
+    if (buildings.mill) {
+      if (day % 5 === 0) {
+        // Młyn działa co 5 dni
+        setPoints((prevPoints) => prevPoints + 50); // Dodawanie dodatkowych punktów
+        logEvent(
+          "Młyn automatycznie przetworzył plony, uzyskano 50 dodatkowych punktów."
+        );
+      }
+    }
+    if (tools.harvester) {
+      setFields((prevFields) =>
+        prevFields.map((field) => {
+          if (field.readyToHarvest) {
+            // Automatyczne zbieranie plonów
+            let harvestPoints = 100; // Podstawowa liczba punktów za zbiory
+
+            // Zwiększenie liczby punktów, jeśli użytkownik posiada młyn
+            if (buildings.mill) {
+              harvestPoints += 50; // Dodatkowe 50 punktów za przetworzenie plonów w młynie
+              logEvent(
+                `Plony z pola ${field.id} zostały przetworzone w młynie, zyskano dodatkowe punkty.`
+              );
+            }
+
+            // Zwiększenie punktów, jeśli użytkownik posiada magazyn
+            if (buildings.warehouse) {
+              harvestPoints = Math.floor(harvestPoints * 1.2); // Zwiększenie o 20%
+              logEvent(
+                `Plony z pola ${field.id} zostały przechowane w magazynie, zyskano dodatkowe punkty.`
+              );
+            }
+
+            setPoints((prevPoints) => prevPoints + harvestPoints); // Aktualizacja liczby punktów
+            logEvent(
+              `Harvester automatycznie zebrał ${field.crop} z pola ${field.id}, uzyskano ${harvestPoints} punktów.`
+            );
+            return {
+              ...field,
+              crop: null,
+              growthStage: 0,
+              readyToHarvest: false,
+            }; // Resetowanie pola
+          }
+          return field;
+        })
+      );
+    }
+
+    // Logika działania narzędzia Seeder - automatyczne sadzenie
+    if (tools.seeder) {
+      let anyFieldSeeded = false; // Flaga, która sprawdzi, czy udało się zasiać jakiekolwiek pole
+    
+      setFields(prevFields =>
+        prevFields.map(field => {
+          if (!field.crop) {
+            anyFieldSeeded = true; // Ustawiamy flagę, jeśli udało się zasiać pole
+            return { ...field, crop: "Pszenica", growthStage: 1, growthTime: 3 };
+          }
+          return field;
+        })
+      );
+    
+      if (anyFieldSeeded) {
+        logEvent("Seeder automatycznie zasiał pszenicę na dostępnych polach.");
+      }
+    }
+    
+  }, [day]);
+
   // Funkcja do zarządzania podlewaniem (zmniejsza zasoby wody)
   const waterField = (id) => {
     if (resources.water > 0) {
@@ -237,8 +383,28 @@ const Farm = () => {
   const harvestCrop = (id) => {
     const field = fields.find((f) => f.id === id);
     if (field && field.readyToHarvest) {
-      logEvent(`Zebrano ${field.crop} z pola ${id}.`);
-      setPoints(points + 100); // Dodawanie punktów za zbiory
+      let harvestPoints = 100; // Podstawowa liczba punktów za zbiory
+
+      // Zwiększenie liczby punktów, jeśli użytkownik posiada młyn
+      if (buildings.mill) {
+        harvestPoints += 50; // Dodatkowe 50 punktów za przetworzenie plonów w młynie
+        logEvent(
+          `Plony z pola ${id} zostały przetworzone w młynie, zyskano dodatkowe punkty.`
+        );
+      }
+
+      // Zwiększenie limitu przechowywania, jeśli użytkownik posiada magazyn
+      if (buildings.warehouse) {
+        harvestPoints += 20; // Dodatkowe 20 punktów za możliwość przechowywania większej ilości plonów
+        logEvent(
+          `Plony z pola ${id} zostały przechowane w magazynie, zyskano dodatkowe punkty.`
+        );
+      }
+
+      setPoints(points + harvestPoints); // Aktualizacja liczby punktów
+      logEvent(
+        `Zebrano ${field.crop} z pola ${id}, uzyskano ${harvestPoints} punktów.`
+      );
       setFields(
         fields.map((f) =>
           f.id === id
@@ -246,6 +412,8 @@ const Farm = () => {
             : f
         )
       );
+    } else {
+      logEvent("Nie ma gotowych do zbioru plonów na tym polu.");
     }
   };
 
@@ -261,7 +429,17 @@ const Farm = () => {
         <p>Nawozy: {resources.fertilizers}</p>
         <p>Pestycydy: {resources.pesticides}</p>
       </div>
+      <h3>Zakup nowych zasobów:</h3>
       <button onClick={buyNewField}>Kup nowe pole (200 punktów)</button>
+      <button onClick={buyWarehouse}>Kup magazyn (300 punktów)</button>
+      <button onClick={buyMill}>Kup młyn (400 punktów)</button>
+      <button onClick={buyIrrigationSystem}>
+        Kup system nawadniania (500 punktów)
+      </button>
+      <button onClick={buyHarvester}>
+        Kup narzędzie do zbioru (300 punktów)
+      </button>
+      <button onClick={buySeeder}>Kup Seeder (400 punktów)</button>
       <div
         style={{
           display: "flex",
