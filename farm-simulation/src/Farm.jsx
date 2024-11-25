@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import Field from "./Field";
 import EventLog from "./EventLog";
+import FieldStatistics from "./FieldStatistic";
+import Modal from "./Modal";
 
 const Farm = () => {
   const [fields, setFields] = useState([
@@ -106,6 +108,7 @@ const Farm = () => {
     }
   };
 
+  const [selectedField, setSelectedField] = useState(null);
   const [eventLog, setEventLog] = useState([]);
   const [day, setDay] = useState(1);
   const [points, setPoints] = useState(1000); // Punkty za zbiory
@@ -217,39 +220,67 @@ const Farm = () => {
   };
 
   useEffect(() => {
-    // Generowanie nowej pogody każdego dnia
-
     const randomEventChance = Math.random();
+    let savedData = false;
     if (daysSinceLastEvent >= 3) {
       if (randomEventChance < 0.3) {
+        savedData = true;
         logEvent("Deszcz zwiększył poziom wody.");
-        setFields(
-          fields.map((field) => ({ ...field, water: field.water + 20 }))
+        setFields((prevFields) =>
+          prevFields.map((field) => ({
+            ...field,
+            water: Math.min(field.water + 20, 100), // Ograniczamy do maksimum 100
+            daneWoda: [...field.daneWoda, Math.min(field.water + 20, 100)],
+          }))
         );
       } else if (randomEventChance < 0.5) {
+        savedData = true;
         logEvent("Susza obniżyła poziom wody.");
-        setFields(
-          fields.map((field) => ({ ...field, water: field.water - 20 }))
+        setFields((prevFields) =>
+          prevFields.map((field) => ({
+            ...field,
+            water: Math.max(field.water - 20, 0), // Ograniczamy do minimum 0
+            daneWoda: [...field.daneWoda, Math.max(field.water - 20, 0)],
+          }))
         );
-      } else if (randomEventChance < 0.7) {
+      } else if (randomEventChance < 0.9) {
+        savedData = true;
         logEvent("Szkodniki zaatakowały uprawy!");
-        setFields(
-          fields.map((field) =>
-            field.crop ? { ...field, health: field.health - 20 } : field
+        setFields((prevFields) =>
+          prevFields.map((field) =>(
+               {
+                  ...field,
+                  health: Math.max(field.health - 20, 0), 
+                  daneZdrowie: [
+                    ...field.daneZdrowie,
+                    Math.max(field.health - 20, 0),
+                  ],
+                })
+
           )
         );
       }
       setDaysSinceLastEvent(0);
     }
-
+   
     const timer = setTimeout(() => {
-      setDaysSinceLastEvent(daysSinceLastEvent + 1);
-      setDay(day + 1);
+      if(!savedData)
+        {
+          setFields((prevFields) =>
+            prevFields.map((field) => ({
+              ...field,
+              daneWoda: [...field.daneWoda, field.water],
+              daneZdrowie: [...field.daneZdrowie, field.health],
+            }))
+          );
+        }
+      setDaysSinceLastEvent((prev) => prev + 1);
+      setDay((prev) => prev + 1);
       generateWeather();
-      setFields(fields.map((field) => updateGrowth(field)));
+      setFields((prevFields) => prevFields.map((field) => updateGrowth(field)));
     }, 5000);
     return () => clearTimeout(timer);
-  }, [day, fields, daysSinceLastEvent]);
+  }, [day, daysSinceLastEvent]);
 
   useEffect(() => {
     if (tools.irrigationSystem) {
@@ -319,22 +350,26 @@ const Farm = () => {
     // Logika działania narzędzia Seeder - automatyczne sadzenie
     if (tools.seeder) {
       let anyFieldSeeded = false; // Flaga, która sprawdzi, czy udało się zasiać jakiekolwiek pole
-    
-      setFields(prevFields =>
-        prevFields.map(field => {
+
+      setFields((prevFields) =>
+        prevFields.map((field) => {
           if (!field.crop) {
             anyFieldSeeded = true; // Ustawiamy flagę, jeśli udało się zasiać pole
-            return { ...field, crop: "Pszenica", growthStage: 1, growthTime: 3 };
+            return {
+              ...field,
+              crop: "Pszenica",
+              growthStage: 1,
+              growthTime: 3,
+            };
           }
           return field;
         })
       );
-    
+
       if (anyFieldSeeded) {
         logEvent("Seeder automatycznie zasiał pszenicę na dostępnych polach.");
       }
     }
-    
   }, [day]);
 
   // Funkcja do zarządzania podlewaniem (zmniejsza zasoby wody)
@@ -417,6 +452,10 @@ const Farm = () => {
     }
   };
 
+  const handleShowStatistics = (field) => {
+    setSelectedField(field);
+  };
+
   return (
     <div>
       <h2>Farma</h2>
@@ -456,8 +495,18 @@ const Farm = () => {
             onWater={waterField}
             onFertilize={fertilizeField}
             onHarvest={harvestCrop}
+            onShowStatistics={handleShowStatistics}
           />
         ))}
+        {selectedField && (
+          <Modal
+            onClose={() => {
+              setSelectedField(null);
+            }}
+          >
+            <FieldStatistics field={selectedField} />
+          </Modal>
+        )}
       </div>
       <EventLog log={eventLog} />
     </div>
