@@ -12,32 +12,14 @@ const Farm = () => {
       water: 100,
       health: 100,
       growthStage: 0,
+      growthProgress: 0,
+      growthRateModifier: 21,
+      plantedDay: 0,
       growthTime: 0,
       readyToHarvest: false,
       daneWoda: [100],
       daneZdrowie: [100],
-    },
-    {
-      id: 2,
-      crop: null,
-      water: 100,
-      health: 100,
-      growthStage: 0,
-      growthTime: 0,
-      readyToHarvest: false,
-      daneWoda: [100],
-      daneZdrowie: [100],
-    },
-    {
-      id: 3,
-      crop: null,
-      water: 100,
-      health: 100,
-      growthStage: 0,
-      growthTime: 0,
-      readyToHarvest: false,
-      daneWoda: [100],
-      daneZdrowie: [100],
+      daneWzrostu: [0],
     },
   ]);
 
@@ -57,6 +39,10 @@ const Farm = () => {
     harvester: false, // Narzędzie do szybszego zbierania plonów
     seeder: false, // Narzędzie do automatycznego sadzenia
   });
+
+  const logisticGrowth = (K, P0, r, t) => {
+    return K / (1 + ((K - P0) / P0) * Math.exp(-r * t));
+  };
 
   const buyWarehouse = () => {
     if (points >= 300) {
@@ -119,18 +105,37 @@ const Farm = () => {
     setEventLog((prevLog) => [`Day ${day}: ${message}`, ...prevLog]);
   };
 
-  const updateGrowth = (field) => {
-    if (field.growthStage > 0 && !field.readyToHarvest) {
-      if (field.growthTime > 0) {
-        return { ...field, growthTime: field.growthTime - 1 };
-      } else {
-        logEvent(
-          `Uprawa ${field.crop} na polu ${field.id} jest gotowa do zbiorów!`
-        );
-        return { ...field, readyToHarvest: true };
-      }
+  const synchronizeFieldData = (field) => ({
+    ...field,
+    daneWoda: [...field.daneWoda, field.water],
+    daneZdrowie: [...field.daneZdrowie, field.health],
+    daneWzrostu: [...field.daneWzrostu, field.growthProgress],
+  });
+
+  const updateGrowth = (field, day) => {
+    if (field.growthProgress >= 100) {
+      return {
+        ...field,
+        readyToHarvest: true,
+      };
     }
-    return field;
+
+    const t = day - field.plantedDay;
+    const K = 100;
+    const P0 = 10;
+
+    const averageWater = field.water / 100;
+    const averageFertilizer = field.health / 100;
+
+    const baseRate = 0.05 + (0.1 * (averageWater + averageFertilizer)) / 2;
+    const r = baseRate * field.growthRateModifier;
+
+    const newGrowthProgress = logisticGrowth(K, P0, r, t);
+
+    return {
+      ...field,
+      growthProgress: Math.min(newGrowthProgress, 100).toFixed(2),
+    };
   };
 
   const buyNewField = () => {
@@ -155,17 +160,17 @@ const Farm = () => {
   };
 
   const plantCrop = (id, crop, growthTime) => {
-    setFields(
-      fields.map((field) =>
+    setFields((prevFields) =>
+      prevFields.map((field) =>
         field.id === id
           ? {
               ...field,
               crop: crop,
-              health: 100,
-              water: 100,
               growthStage: 1,
-              growthTime: growthTime,
+              plantedDay: day, // Zapis dnia zasadzenia
               readyToHarvest: false,
+              daneZdrowie: [10], // Startowe zdrowie
+              daneWoda: [100], // Startowe nawodnienie
             }
           : field
       )
@@ -181,32 +186,30 @@ const Farm = () => {
 
     switch (randomWeather) {
       case "sunny":
-        // Brak wpływu na pola, dzień bez zmian
         logEvent("Słoneczny dzień. Brak zmian na polach.");
         break;
 
       case "rain":
-        // Deszcz: zwiększa poziom wody na wszystkich polach
         setFields((prevFields) =>
-          prevFields.map((field) => ({
-            ...field,
-            water: Math.min(field.water + 30, 100), // Zwiększamy wodę maksymalnie do 100
-            daneWoda: [...field.daneWoda, Math.min(field.water + 30, 100)],
-          }))
+          prevFields.map((field) =>
+            synchronizeFieldData({
+              ...field,
+              water: Math.min(field.water + 30, 100),
+            })
+          )
         );
         logEvent("Deszcz zwiększył poziom wody na polach.");
         break;
 
       case "drought":
-        // Susza: obniża poziom wody i zdrowie roślin
         setFields((prevFields) =>
-          prevFields.map((field) => ({
-            ...field,
-            water: Math.max(field.water - 20, 0), // Zmniejszamy wodę, minimalnie do 0
-            health: Math.max(field.health - 10, 0), // Zmniejszamy zdrowie, minimalnie do 0
-            daneWoda: [...field.daneWoda, Math.max(field.water - 20, 0)],
-            daneZdrowie: [...field.daneZdrowie, Math.max(field.health - 10, 0)],
-          }))
+          prevFields.map((field) =>
+            synchronizeFieldData({
+              ...field,
+              water: Math.max(field.water - 20, 0),
+              health: Math.max(field.health - 10, 0),
+            })
+          )
         );
         logEvent("Susza obniżyła poziom wody i zdrowie roślin.");
         break;
@@ -221,64 +224,54 @@ const Farm = () => {
 
   useEffect(() => {
     const randomEventChance = Math.random();
-    let savedData = false;
+    let eventOccurred = false; // Flaga sprawdzająca, czy zdarzenie wystąpiło
+
     if (daysSinceLastEvent >= 3) {
       if (randomEventChance < 0.3) {
-        savedData = true;
+        eventOccurred = true;
         logEvent("Deszcz zwiększył poziom wody.");
         setFields((prevFields) =>
           prevFields.map((field) => ({
             ...field,
-            water: Math.min(field.water + 20, 100), // Ograniczamy do maksimum 100
-            daneWoda: [...field.daneWoda, Math.min(field.water + 20, 100)],
+            water: Math.min(field.water + 20, 100),
           }))
         );
       } else if (randomEventChance < 0.5) {
-        savedData = true;
+        eventOccurred = true;
         logEvent("Susza obniżyła poziom wody.");
         setFields((prevFields) =>
           prevFields.map((field) => ({
             ...field,
-            water: Math.max(field.water - 20, 0), // Ograniczamy do minimum 0
-            daneWoda: [...field.daneWoda, Math.max(field.water - 20, 0)],
+            water: Math.max(field.water - 20, 0),
           }))
         );
-      } else if (randomEventChance < 0.9) {
-        savedData = true;
+      } else if (randomEventChance < 0.7) {
+        eventOccurred = true;
         logEvent("Szkodniki zaatakowały uprawy!");
         setFields((prevFields) =>
-          prevFields.map((field) =>(
-               {
-                  ...field,
-                  health: Math.max(field.health - 20, 0), 
-                  daneZdrowie: [
-                    ...field.daneZdrowie,
-                    Math.max(field.health - 20, 0),
-                  ],
-                })
-
-          )
+          prevFields.map((field) => ({
+            ...field,
+            health: Math.max(field.health - 20, 0),
+          }))
         );
       }
       setDaysSinceLastEvent(0);
     }
-   
+
     const timer = setTimeout(() => {
-      if(!savedData)
-        {
-          setFields((prevFields) =>
-            prevFields.map((field) => ({
-              ...field,
-              daneWoda: [...field.daneWoda, field.water],
-              daneZdrowie: [...field.daneZdrowie, field.health],
-            }))
-          );
-        }
+      setDay((prevDay) => prevDay + 1);
+
+      setFields((prevFields) =>
+        prevFields.map((field) => {
+          const updatedField = updateGrowth(field, day + 1);
+          return synchronizeFieldData(updatedField);
+        })
+      );
+
       setDaysSinceLastEvent((prev) => prev + 1);
-      setDay((prev) => prev + 1);
       generateWeather();
-      setFields((prevFields) => prevFields.map((field) => updateGrowth(field)));
     }, 5000);
+
     return () => clearTimeout(timer);
   }, [day, daysSinceLastEvent]);
 
@@ -375,18 +368,17 @@ const Farm = () => {
   // Funkcja do zarządzania podlewaniem (zmniejsza zasoby wody)
   const waterField = (id) => {
     if (resources.water > 0) {
-      setFields(
-        fields.map((field) =>
+      setFields((prevFields) =>
+        prevFields.map((field) =>
           field.id === id
-            ? {
+            ? synchronizeFieldData({
                 ...field,
-                water: field.water + 10,
-                daneWoda: [...field.daneWoda, field.water + 10],
-              }
+                water: Math.min(field.water + 10, 100),
+              })
             : field
         )
       );
-      setResources({ ...resources, water: resources.water - 10 }); // Zużycie wody
+      setResources({ ...resources, water: resources.water - 10 });
       logEvent(`Podlano pole ${id}. Zużyto 10 jednostek wody.`);
     } else {
       logEvent("Brak wystarczającej ilości wody do podlania.");
@@ -396,18 +388,17 @@ const Farm = () => {
   // Funkcja do nawożenia (zmniejsza zasoby nawozów)
   const fertilizeField = (id) => {
     if (resources.fertilizers > 0) {
-      setFields(
-        fields.map((field) =>
+      setFields((prevFields) =>
+        prevFields.map((field) =>
           field.id === id
-            ? {
+            ? synchronizeFieldData({
                 ...field,
-                health: field.health + 10,
-                daneZdrowie: [...field.daneZdrowie, field.health + 10],
-              }
+                health: Math.min(field.health + 10, 100),
+              })
             : field
         )
       );
-      setResources({ ...resources, fertilizers: resources.fertilizers - 5 }); // Zużycie nawozów
+      setResources({ ...resources, fertilizers: resources.fertilizers - 5 });
       logEvent(`Nawożono pole ${id}. Zużyto 5 jednostek nawozów.`);
     } else {
       logEvent("Brak wystarczającej ilości nawozów.");
@@ -417,38 +408,30 @@ const Farm = () => {
   // Funkcja do zbioru plonów
   const harvestCrop = (id) => {
     const field = fields.find((f) => f.id === id);
+
     if (field && field.readyToHarvest) {
-      let harvestPoints = 100; // Podstawowa liczba punktów za zbiory
+      const harvestPoints = 100;
 
-      // Zwiększenie liczby punktów, jeśli użytkownik posiada młyn
-      if (buildings.mill) {
-        harvestPoints += 50; // Dodatkowe 50 punktów za przetworzenie plonów w młynie
-        logEvent(
-          `Plony z pola ${id} zostały przetworzone w młynie, zyskano dodatkowe punkty.`
-        );
-      }
-
-      // Zwiększenie limitu przechowywania, jeśli użytkownik posiada magazyn
-      if (buildings.warehouse) {
-        harvestPoints += 20; // Dodatkowe 20 punktów za możliwość przechowywania większej ilości plonów
-        logEvent(
-          `Plony z pola ${id} zostały przechowane w magazynie, zyskano dodatkowe punkty.`
-        );
-      }
-
-      setPoints(points + harvestPoints); // Aktualizacja liczby punktów
       logEvent(
         `Zebrano ${field.crop} z pola ${id}, uzyskano ${harvestPoints} punktów.`
       );
-      setFields(
-        fields.map((f) =>
+      setPoints((prevPoints) => prevPoints + harvestPoints);
+
+      setFields((prevFields) =>
+        prevFields.map((f) =>
           f.id === id
-            ? { ...f, crop: null, growthStage: 0, readyToHarvest: false }
+            ? {
+                ...f,
+                crop: null,
+                growthProgress: 0,
+                readyToHarvest: false,
+                daneWzrostu: [...f.daneWzrostu, 0],
+              }
             : f
         )
       );
     } else {
-      logEvent("Nie ma gotowych do zbioru plonów na tym polu.");
+      logEvent(`Plon na polu ${id} nie jest jeszcze gotowy do zbioru.`);
     }
   };
 
