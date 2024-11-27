@@ -1,6 +1,7 @@
 import React from "react";
 import Crop from "./Crop";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faChartSimple } from "@fortawesome/free-solid-svg-icons";
 
 const Field = ({ field, onPlant, onWater, onFertilize, onHarvest, onShowStatistics }) => {
   return (
@@ -14,6 +15,7 @@ const Field = ({ field, onPlant, onWater, onFertilize, onHarvest, onShowStatisti
       <h3>Pole {field.id}</h3>
       <p>Poziom wody: {field.water}</p>
       <p>Zdrowie: {field.health}</p>
+      <p>Poziom wzrostu: {field.growthProgress}</p>
       <Crop crop={field.crop} readyToHarvest={field.readyToHarvest} />
 
       {!field.readyToHarvest ? (
@@ -35,7 +37,7 @@ const Field = ({ field, onPlant, onWater, onFertilize, onHarvest, onShowStatisti
         onClick={() => onShowStatistics(field)}
         style={{ marginTop: "10px", cursor: "pointer" }}
       >
-        <FontAwesomeIcon icon="fa-solid fa-chart-simple" /> Statystyki
+        Statystyki
       </button>
     </div>
   );
