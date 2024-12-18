@@ -9,23 +9,23 @@ const Field = ({ field, onPlant, onWater, onFertilize, onHarvest, onShowStatisti
       style={{
         border: "1px solid black",
         padding: "10px",
-        width: "150px",
+        width: "175px",
       }}
     >
       <h3>Pole {field.id}</h3>
       <p>Poziom wody: {field.water}</p>
       <p>Zdrowie: {field.health}</p>
-      <p>Poziom wzrostu: {field.growthProgress}</p>
+      <p>Poziom wzrostu: {field.growthProgress}%</p>
       <Crop crop={field.crop} readyToHarvest={field.readyToHarvest} />
 
       {!field.readyToHarvest ? (
         <>
           <button onClick={() => onWater(field.id)}>Podlej pole</button>
           <button onClick={() => onFertilize(field.id)}>Nawóź pole</button>
-          <button onClick={() => onPlant(field.id, "Pszenica", 3)}>
+          <button onClick={() => onPlant(field.id, "pszenica", 3)}>
             Zasadź Pszenicę
           </button>
-          <button onClick={() => onPlant(field.id, "Kukurydza", 5)}>
+          <button onClick={() => onPlant(field.id, "kukurydza", 5)}>
             Zasadź Kukurydzę
           </button>
         </>
