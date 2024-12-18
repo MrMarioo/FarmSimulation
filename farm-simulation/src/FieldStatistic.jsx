@@ -5,10 +5,11 @@ import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
 const FieldStatistics = ({ field, onClose }) => {
-  const { daneWoda, daneZdrowie, daneWzrostu } = field;
+  const { daneWoda, daneZdrowie, daneWzrostu, cropType } = field;
 
   const chartRef = useRef(null); // Referencja do wykresu
 
+  // Przygotowanie danych do wykresu
   const data = {
     labels: daneWzrostu.map((_, index) => `Dzień ${index + 1}`),
     datasets: [
@@ -44,8 +45,8 @@ const FieldStatistics = ({ field, onClose }) => {
     },
   };
 
+  // Pobieranie wykresu jako obraz
   const downloadChart = () => {
-    // Pobranie elementu canvas i zapisanie go jako obraz
     const chartInstance = chartRef.current;
     if (chartInstance) {
       const url = chartInstance.toBase64Image();
@@ -54,6 +55,37 @@ const FieldStatistics = ({ field, onClose }) => {
       link.download = `Statystyki_Pola_${field.id}.png`;
       link.click();
     }
+  };
+
+  // Generowanie danych w formacie tabelarycznym
+  const generateTableData = () => {
+    const records = daneWzrostu.map((growth, index) => ({
+      day: `Dzień ${index + 1}`,
+      water: daneWoda[index],
+      health: daneZdrowie[index],
+      growth: growth,
+      cropType: cropType
+    }));
+
+    return records;
+  };
+
+  // Pobieranie danych tabelarycznych jako plik CSV
+  const downloadTableData = () => {
+    const records = generateTableData();
+    const csvContent =
+      'Dzień,Poziom Wody,Zdrowie Rośliny,Poziom Wzrostu\n' +
+      records
+        .map((record) => `${record.day}&${cropType}&${record.water}&${record.health}&${record.growth} \\ \hline`)
+        .join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.href = url;
+    link.download = `Statystyki_Pola_${field.id}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -72,19 +104,33 @@ const FieldStatistics = ({ field, onClose }) => {
     >
       <h2>Statystyki pola {field.id}</h2>
       <Line ref={chartRef} data={data} options={options} />
-      <button
-        onClick={downloadChart}
-        style={{
-          marginTop: '20px',
-          padding: '10px 20px',
-          backgroundColor: '#4CAF50',
-          color: 'white',
-          border: 'none',
-          cursor: 'pointer',
-        }}
-      >
-        Pobierz Wykres
-      </button>
+      <div style={{ marginTop: '20px' }}>
+        <button
+          onClick={downloadChart}
+          style={{
+            marginRight: '10px',
+            padding: '10px 20px',
+            backgroundColor: '#4CAF50',
+            color: 'white',
+            border: 'none',
+            cursor: 'pointer',
+          }}
+        >
+          Pobierz Wykres
+        </button>
+        <button
+          onClick={downloadTableData}
+          style={{
+            padding: '10px 20px',
+            backgroundColor: '#2196F3',
+            color: 'white',
+            border: 'none',
+            cursor: 'pointer',
+          }}
+        >
+          Pobierz Dane (CSV)
+        </button>
+      </div>
     </div>
   );
 };
